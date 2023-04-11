@@ -112,11 +112,15 @@ class Board:
     selected_piece = None
     hovered_tile = None
     current_variation_index = None
+    Player = None
+    Players = []
     current_player_index = 0
     selected_tile = None
     selected_piece_index = None
+    has_winner = False
     def __init__(self, players):
         self.Players = players
+        self.Player = self.Players[0]
         for i in range(board_size):
             row = []
             for j in range(board_size):
@@ -148,7 +152,7 @@ class Board:
     def cpu_placement(self):
         # computer places a piece
         self.check_if_player_has_any_placeable_pieces()
-        placeable_pieces = self.Players[self.current_player_index].get_placeable_pieces()
+        placeable_pieces = self.Player.get_placeable_pieces()
         # sort placeable pieces by size descending and select the largest one
         self.selected_piece = sorted(placeable_pieces, key=lambda piece: piece.get_piece_size(), reverse=True)[0]
         # filter placeable pieces by size and get only the largest ones, then select randomly from them
@@ -171,7 +175,6 @@ class Board:
             self.tiles[x + self.selected_tile.position[0]][y + self.selected_tile.position[1]].highlighted = True
         self.set_piece(cpu_move=True)
         
-
     def selected_hovered_tile(self):
         self.selected_tile = self.hovered_tile
     
@@ -203,29 +206,29 @@ class Board:
                         current_tile.highlighted = False
                         current_tile.placeable = False
                         current_tile.occupied = True
-                        current_tile.occupied_by = self.Players[self.current_player_index]
-                        current_tile.color = PLAYER_COLORS[self.current_player_index]
+                        current_tile.occupied_by = self.Player
+                        current_tile.color = self.Player.color
                         current_tile.draw_tile()
             self.clear_all_highlighted_tiles()
-            self.Players[self.current_player_index].has_placed_piece = True
-            self.Players[self.current_player_index].positioned_pieces += 1
-            self.Players[self.current_player_index].is_current_player = False
+            self.Player.has_placed_piece = True
+            self.Player.positioned_pieces += 1
+            self.Player.is_current_player = False
             
-            current_player_index = self.current_player_index
-            has_placeable_pieces = False
-            while not has_placeable_pieces:
-                self.current_player_index = (self.current_player_index + 1) % 4
-                self.Players[self.current_player_index].is_current_player = True
-                has_placeable_pieces = self.check_if_player_has_any_placeable_pieces()
-                if not has_placeable_pieces:
-                    self.Players[self.current_player_index].playing = False
-                    self.Players[self.current_player_index].loser = True
-                if self.current_player_index == current_player_index:
-                    break
-                
+    def next_player(self):
+        has_placeable_pieces = False
+        while not has_placeable_pieces:
+            self.current_player_index = (self.current_player_index + 1) % 4
+            self.Players[self.current_player_index].is_current_player = True
+            has_placeable_pieces = self.check_if_player_has_any_placeable_pieces()
+            if not has_placeable_pieces:
+                self.Players[self.current_player_index].playing = False
+                self.Players[self.current_player_index].loser = True
             if self.current_player_index == current_player_index:
-                # declare winner
-                self.Players[self.current_player_index].winner = True
+                break
+            
+        if self.current_player_index == current_player_index:
+            # declare winner
+            self.Players[self.current_player_index].winner = True
     
     def check_if_player_has_any_placeable_pieces(self):
         for piece in self.Players[self.current_player_index].pieces:
@@ -418,22 +421,15 @@ class Piece:
         
     def get_piece_size(self):
         return len(self.piece)
-        
-    def get_not_positioned_pieces(self):
-        not_positioned_pieces = []
-        for p in self.pieces:
-            if not p.positioned:
-                not_positioned_pieces.append(p)
-        return not_positioned_pieces
     
     def get_position_of_tile(self, tile):
         x0,y0 = self.offside_position[0], self.offside_position[1]
         return [x0 + tile[0] * square_size_offside, y0 + tile[1] * square_size_offside]
     
     def hover_detection(self, mouse_x, mouse_y):
+        self.hovered = False
         if self.positioned or not self.placeable:
             return False
-        self.hovered = False
         for p in range(len(self.piece)):
             x, y = self.get_position_of_tile(self.piece[p])
             if mouse_x >= x and mouse_x <= x + square_size_offside and mouse_y >= y and mouse_y <= y + square_size_offside:
@@ -466,11 +462,11 @@ class Piece:
             new_piece = [[x - new_center_tile[0], y - new_center_tile[1]] for x, y in self.piece]
             variations.append(new_piece)
             for i in range(3):
-                new_piece = rotate_90degrees(new_piece)
+                new_piece = self.rotate_90degrees(new_piece)
                 variations.append(new_piece)
-            mirrored_piece = mirror_piece(new_piece)
+            mirrored_piece = self.mirror_piece(new_piece)
             for i in range(4):
-                mirrored_piece = rotate_90degrees(mirrored_piece)
+                mirrored_piece = self.rotate_90degrees(mirrored_piece)
                 variations.append(mirrored_piece)
         tuple_lists = [tuple(map(tuple, mylist)) for mylist in variations]
         # Add the tuples to a set to remove duplicates
@@ -479,19 +475,19 @@ class Piece:
         uniques = [list(map(list, mylist)) for mylist in unique_tuple_lists]
         return uniques    
     
-def rotate_90degrees(piece):
-    # rotate piece 90 degrees
-    rotated_piece = []
-    for i in range(len(piece)):
-        rotated_piece.append([piece[i][1], -piece[i][0]])
-    return rotated_piece
+    def rotate_90degrees(self, piece):
+        # rotate piece 90 degrees
+        rotated_piece = []
+        for i in range(len(piece)):
+            rotated_piece.append([piece[i][1], -piece[i][0]])
+        return rotated_piece
 
-def mirror_piece(piece):
-    # mirror piece
-    mirrored_piece = []
-    for i in range(len(piece)):
-        mirrored_piece.append([piece[i][0], -piece[i][1]])
-    return mirrored_piece
+    def mirror_piece(self, piece):
+        # mirror piece
+        mirrored_piece = []
+        for i in range(len(piece)):
+            mirrored_piece.append([piece[i][0], -piece[i][1]])
+        return mirrored_piece
 
 PLAYERS = []
 
@@ -517,11 +513,13 @@ def draw_stuff():
         
         PLAYERS.append(Player(ALL_PIECES[c], PLAYER_COLORS[c], ALL_PLAYER_STRINGS[c]))
 
+
+draw_stuff()
+
 BOARD = Board(PLAYERS)
 BOARD.draw_board()
 
 any_piece_selected = False
-draw_stuff()
 # add button that triggers computer to play
 button = Button(LIGHT_GRAY, SCREEN_WIDTH - 100, SCREEN_HEIGHT - 30, 90, 30, "Computer")
 button.draw(screen)
